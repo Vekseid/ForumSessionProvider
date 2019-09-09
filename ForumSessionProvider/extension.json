@@ -1,0 +1,43 @@
+{
+  "name": "ForumSessionProvider",
+  "version": "1.0.0",
+  "author": [
+    "Vekseid"
+  ],
+  "url": "https://github.com/Vekseid/ForumSessionProvider",
+  "description": "Uses an Elkarte or SMF installation as a session provider for MediaWiki single-sign on.",
+  "license-name": "BSD",
+  "type": "other",
+  "requires": {
+    "MediaWiki": ">= 1.27.0"
+  },
+  "config": {
+    "_prefix": "wgFSP",
+    "Path": "",
+    "NameStyle": "smf",
+    "Software": "elk1.1",
+    "SuperGroups": [],
+    "InterfaceGroups": [1],
+    "AdminGroups": [1],
+    "AllowGroups": [],
+    "DenyGroups:": []
+  },
+  "SessionProviders": {
+    "ForumSessionProvider": {
+      "class": "ForumSessionProvider",
+      "args": []
+    }
+  },
+  "DefaultUserOptions": {
+    "forum_last_update": 0
+  },
+  "Hooks": {
+    "SpecialPageBeforeExecute": [
+      "ForumSessionProvider::onSpecialPageBeforeExecute"
+    ]
+  },
+  "AutoloadClasses": {
+    "ForumSessionProvider": "ForumSessionProvider.php"
+  },
+  "manifest_version": 1
+}
