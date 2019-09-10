@@ -1,6 +1,6 @@
-This MediaWiki (1.27+) extension allows users in an Elkarte or SMF forum to be automatically signed in if they are of the appropriate usergroup while logged into the forum.
+This MediaWiki (1.27+) extension allows users in an [Elkarte Forum](https://www.elkarte.net/) or [SMF forum](https://www.simplemachines.org/) to be automatically signed in if they are of the appropriate usergroup while logged into the forum.
 
-For examples of this plugin in action, see:
+For examples of this in action, see:
 
 * [Elliquiy Role-Playing Forums Wiki](https://elliquiy.com/wiki/Welcome_to_Elluiki) (Gated adult writing community. Wiki active since 2006. Adult stuff is sequestered to private namespaces.)
 * [Legends of a World Unbent](https://worldunbent.com/) (Site I made for Minecraft and Exalted stuff - because they're both flat. Used as a testbed for this and OpenImporter.)
@@ -12,6 +12,10 @@ I wrote this to be compatible with Elkarte (1.0 and 1.1) and SMF (2.0 and 2.1). 
 To use, the contents of the ForumSessionProvider directory need to be placed into extensions/ForumSessionProvider. It is then loaded using the 'new' plugin loading method in LocalSettings.php:
 
     wfLoadExtension('ForumSessionProvider');
+    
+**If you are upgrading from a truly ancient MediaWiki version you will need to make sure $wgSecretKey is set.**
+    
+    $wgSecretKey = "someextraordinarilylongstringgoesheremediawikilikesitlongwithsomethingsomething"
     
 You will also want to lock down editing and creating accounts normally. For example:
 
