@@ -2,7 +2,7 @@ This MediaWiki (1.27+) extension allows users in an Elkarte or SMF forum to be a
 
 For examples of this plugin in action, see:
 
-* [Elliquiy Role-Playing Forums](https://elliquiy.com/) (Gated adult writing community. Wiki active since 2006 with thousands of pages. Adult stuff is sequestered to private namespaces.)
+* [Elliquiy Role-Playing Forums Wiki](https://elliquiy.com/wiki/Welcome_to_Elluiki) (Gated adult writing community. Wiki active since 2006. Adult stuff is sequestered to private namespaces.)
 * [Legends of a World Unbent](https://worldunbent.com/) (Site I made for Minecraft and Exalted stuff - because they're both flat. Used as a testbed for this and OpenImporter.)
 * [Hexwiki](https://hexwiki.com/) (I store technical documentation here when I get to writing it.)
 
