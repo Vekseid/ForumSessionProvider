@@ -25,6 +25,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 	protected $logger;
 	protected $id = 0;
 	protected $password = '';
+	protected $authSecret = false;
 	protected $prefix;
 	protected $db;
 	protected $dbtype;
@@ -32,7 +33,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 	protected $userWiki;
 	protected $userInfo;
     protected $userName;
-    protected $groups;
+    protected $groups = [];
 	
 	public function __construct( array $params = [] ) {
 		parent::__construct($params);
@@ -57,6 +58,10 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 
 			if ($this->id && is_integer($this->id)) {
                 $this->prefix = $db_prefix;
+
+                if (empty($cookie_no_auth_secret) && !empty($auth_secret)) {
+                    $this->authSecret = $auth_secret;
+                }
 
                 // TODO: make use of $db_type to support other databases.
                 $this->dbtype = $db_type;
@@ -130,7 +135,12 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
                 return $this->password === hash('sha256', $this->userForum['passwd'] . $this->userForum['password_salt']);
                 break;
             case 'smf2.0':
-                return $this->password === sha1($this->userForum['passwd'] . $this->userForum['password_salt']);
+                if ($this->authSecret !== false) {
+                    return $this->FScookie['password'] === hash_hmac('sha1', sha1($this->userForum['passwd'] . $this->userForum['password_salt']), $this->authSecret);
+                }
+                else {
+                    return $this->password === sha1($this->userForum['passwd'] . $this->userForum['password_salt']);
+                }
                 break;
             case 'smf2.1':
                 return $this->password === hash('sha512', $this->userForum['passwd'] . $this->userForum['password_salt']);
@@ -189,7 +199,9 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
             return null;
         }
 
-        $this->groups = explode(',', $this->userForum['additional_groups']);
+        if (strlen($this->userForum['additional_groups'])) {
+            $this->groups = explode(',', $this->userForum['additional_groups']);
+        }
         $this->groups[] = $this->userForum['id_group'];
 
         $this->userInfo = UserInfo::newFromName($this->userName, true);
@@ -203,13 +215,13 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
             }
         }
 
-        // Toggle admin permissions immediately if they have changed.
-        $this->setAdmin();
+        // Toggle special permissions immediately if they have changed.
+        $this->setWikiGroups();
 
         /**
          * The forum is responsible for e-mails, so we don't need to worry about it changing much.
          */
-        if (time() > ((int) $this->userWiki->getOption('forum_last_update', 0) + 1800)) {
+        if (time() > ((int) $this->userWiki->getOption('forum_last_update_user', 0) + 1800)) {
             $this->updateWikiUser();
         }
 
@@ -242,49 +254,45 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 	    $this->userWiki->setEmail($this->userForum['email_address']);
         $this->userWiki->setRealName($this->userForum['real_name']);
 
-        $this->userWiki->setOption('forum_last_update', time());
+        if ($this->userWiki->getOption('forum_member_id', 0) === 0) {
+            $this->userWiki->setOption('forum_member_id', $this->id);
+        }
+
+        $this->userWiki->setOption('forum_last_update_user', time());
         $this->userWiki->saveSettings();
     }
 
-    private function setAdmin() {
-        if (array_intersect($GLOBALS['wgFSPAdminGroups'], $this->groups)) {
-            if (!in_array("sysop", $this->userWiki->getEffectiveGroups())) {
-                $this->userWiki->addGroup("sysop");
-                $this->userWiki->saveSettings();
-            }
-        }
-        else {
-            if (in_array("sysop", $this->userWiki->getEffectiveGroups())) {
-                $this->userWiki->removeGroup("sysop");
-                $this->userWiki->saveSettings();
-            }
+    private function setWikiGroups() {
+        // Wiki Group Name => Forum Group IDS
+        $groupActions = [
+            'sysop' => $GLOBALS['wgFSPAdminGroups'],
+            'interface-admin' => $GLOBALS['wgFSPInterfaceGroups'],
+            'bureaucrat' => $GLOBALS['wgFSPSuperGroups'],
+        ];
+
+        // Add in our special groups.
+        foreach ($GLOBALS['wgFSPSpecialGroups'] as $fs_group_id => $wiki_group_name) {
+            // Group didn't exist?
+            if (!isset($groupActions[$wiki_group_name]))
+                $groupActions[$wiki_group_name] = [];
+
+            // Add the Forum group into the wiki group.
+            $groupActions[$wiki_group_name][] = $fs_group_id;
         }
 
-        if (array_intersect($GLOBALS['wgFSPInterfaceGroups'], $this->groups)) {
-            if (!in_array("interface-admin", $this->userWiki->getEffectiveGroups())) {
-                $this->userWiki->addGroup("interface-admin");
-                $this->userWiki->saveSettings();
-            }
-        }
-        else {
-            if (in_array("interface-admin", $this->userWiki->getEffectiveGroups())) {
-                $this->userWiki->removeGroup("interface-admin");
-                $this->userWiki->saveSettings();
-            }
+        // Now we are going to check all the groups.
+        foreach ($groupActions as $wiki_group_name => $fs_group_ids) {
+            // They are in the Forum group but not the wiki group?
+            if (array_intersect($fs_group_ids, $this->groups) && !in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
+                $this->userWiki->addGroup($wiki_group_name);
+            // They are not in the Forum group, but in the wiki group
+            elseif (!array_intersect($fs_group_ids, $this->groups) && in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
+                $this->userWiki->removeGroup($wiki_group_name);
         }
 
-        if (array_intersect($GLOBALS['wgFSPSuperGroups'], $this->groups)) {
-            if (!in_array("bureaucrat", $this->userWiki->getEffectiveGroups())) {
-                $this->userWiki->addGroup("bureaucrat");
-                $this->userWiki->saveSettings();
-            }
-        }
-        else {
-            if (in_array("bureaucrat", $this->userWiki->getEffectiveGroups())) {
-                $this->userWiki->removeGroup("bureaucrat");
-                $this->userWiki->saveSettings();
-            }
-        }
+        // Did we make any changes?
+        $this->userWiki->setOption('forum_last_update_groups', time());
+        $this->userWiki->saveSettings();
     }
 
     private function createWikiUser() {
@@ -295,7 +303,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 
         $this->userWiki->addToDatabase();
 
-        $this->userWiki->setOption('forum_last_update', time());
+        $this->userWiki->setOption('forum_last_update_user', time());
         $this->userWiki->saveSettings();
     }
 }

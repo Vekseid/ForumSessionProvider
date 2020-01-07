@@ -80,13 +80,19 @@ Options
     $wgFSPAdminGroups = [1, 2, 91];
     $wgFSPInterfaceGroups = [1, 2, 97];
     $wgFSPSuperGroups = [1];
+    
+**$wgFSPSpecialGroups** Optional associative array of arrays to map forum groups to wiki groups.
+
+    $wgFSPSpecialGroups = [
+        'coolpeople' => [4, 15, 92], 
+        'sanepeople' => [3, 234, 413]
+    ];
 
 ----
 Stuff To Do
 ----------------------------------------
 * Add more forks, as needed.
-* Support Postgres and/or SQLLite, as needed.
-* Add group mapping like the old auth plugin did.
+* Support Postgres and possibly SQLLite, as needed.
 
 ----
 Getting New SMF Forks In
