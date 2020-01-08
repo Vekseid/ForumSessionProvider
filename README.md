@@ -87,6 +87,22 @@ Options
         'coolpeople' => [4, 15, 92], 
         'sanepeople' => [3, 234, 413]
     ];
+    
+**$wgFSPEnableBanCheck** Optional, defaults to false. Checks Elkarte's SMF/Ban tables for bans.
+
+    $wgFSPEnableBanCheck = true;
+
+----
+Troubleshooting
+---------------
+
+Set $wgDebugLogFile in your LocalSettings.php:
+
+    $wgDebugLogFile = "/some/private/path/mediawiki.log";
+    
+Search for ForumSessionProvider and it will tell you what it is thinking.
+
+This bloats pretty quickly, so you'll want to comment it out after you have resolved your problem.
 
 ----
 Stuff To Do
