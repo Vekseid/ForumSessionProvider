@@ -42,7 +42,9 @@
   "DefaultUserOptions": {
     "forum_last_update_groups": 0,
     "forum_last_update_user": 0,
-    "forum_member_id": 0
+    "forum_last_update_ban": 0,
+    "forum_member_id": 0,
+    "forum_is_banned": 0
   },
   "Hooks": {
     "SpecialPageBeforeExecute": [

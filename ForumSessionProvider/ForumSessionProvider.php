@@ -165,10 +165,8 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         $result->free();
 
         if (empty($this->userForum)) {
-            return null;
-        }
-        else {
             $this->logger->warning('Member id not found in forum database: ' . $this->id);
+            return null;
         }
 
         if ($this->checkPassword()) {
@@ -183,12 +181,14 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
                 case 'domain':
                     // A more restrictive policy.
                     if ($this->userName !== preg_replace('`[^a-zA-Z0-9 .-]+`i', '', $this->userName)) {
+                        $this->logger->warning('Member failed to validate domain pattern: ' . $this->id);
                         return null;
                     }
                     break;
                 default:
                     // Just kick them if they have an unusable username.
                     if (preg_match('`[#<>[\]|{}@:]+`', $this->userName)) {
+                        $this->logger->warning('Member with invalid name: ' . $this->id);
                         return null;
                     }
             }
@@ -226,8 +226,11 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         }
 
         if ((!array_intersect($GLOBALS['wgFSPAllowGroups'], $this->groups) ||
-                array_intersect($GLOBALS['wgFSPDenyGroups'], $this->groups)) &&
-                !array_intersect($GLOBALS['wgFSPAdminGroups'], $this->groups)) {
+                array_intersect($GLOBALS['wgFSPDenyGroups'], $this->groups) ||
+                $this->isBanned()) &&
+                !array_intersect($GLOBALS['wgFSPAdminGroups'], $this->groups) &&
+                !array_intersect($GLOBALS['wgFSPSuperGroups'], $this->groups)) {
+            $this->logger->warning('Member denied access: ' . $this->id);
             return null;
         }
 
@@ -271,13 +274,15 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         ];
 
         // Add in our special groups.
-        foreach ($GLOBALS['wgFSPSpecialGroups'] as $fs_group_id => $wiki_group_name) {
-            // Group didn't exist?
-            if (!isset($groupActions[$wiki_group_name]))
-                $groupActions[$wiki_group_name] = [];
+        if (is_array($GLOBALS['wgFSPSpecialGroups'])) {
+            foreach ($GLOBALS['wgFSPSpecialGroups'] as $fs_group_id => $wiki_group_name) {
+                // Group didn't exist?
+                if (!isset($groupActions[$wiki_group_name]))
+                    $groupActions[$wiki_group_name] = [];
 
-            // Add the Forum group into the wiki group.
-            $groupActions[$wiki_group_name][] = $fs_group_id;
+                // Add the Forum group into the wiki group.
+                $groupActions[$wiki_group_name][] = $fs_group_id;
+            }
         }
 
         // Now we are going to check all the groups.
@@ -305,5 +310,44 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 
         $this->userWiki->setOption('forum_last_update_user', time());
         $this->userWiki->saveSettings();
+    }
+
+    private function isBanned() {
+        // Check their ban once every 5 minutes.
+        if (!$GLOBALS['wgFSPEnableBanCheck']) {
+            return false;
+        }
+
+        if (!(time() > ((int) $this->userWiki->getOption('forum_last_update_ban', 0) + 300)))
+            return $this->userWiki->getOption('forum_is_banned', 0);
+
+        switch ($GLOBALS['wgFSPSoftware']) {
+            case 'elk1.0':
+            case 'elk1.1':
+            case 'smf2.0':
+            case 'smf2.1':
+                return $this->isBannedSMF();
+                break;
+            default: return false;
+        }
+    }
+
+    private function isBannedSMF() {
+        $result = $this->db->query('
+			SELECT id_ban
+			FROM ' . $this->prefix . 'ban_items AS i
+			LEFT JOIN ' . $this->prefix . 'ban_groups AS g
+				ON (i.id_ban_group = g.id_ban_group)
+			WHERE i.id_member = ' . ( (int) $this->id) . '
+				AND (g.cannot_post = 1 OR g.cannot_login = 1)');
+
+        $banned = $result->num_rows;
+        $result->free();
+
+        $this->userWiki->setOption('forum_last_update_ban', time());
+        $this->userWiki->setOption('forum_is_banned', $banned);
+        $this->userWiki->saveSettings();
+
+        return $banned;
     }
 }
