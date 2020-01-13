@@ -23,23 +23,31 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 
 	protected $loaded = false;
 	protected $logger;
-	protected $id = 0;
 	protected $password = '';
 	protected $authSecret = false;
 	protected $prefix;
+
+    /** @var PDO $db */
 	protected $db;
-	protected $dbtype;
+	protected $databaseDriver;
+	protected $cookieName;
+    protected $userId = 0;
 	protected $userForum;
 	protected $userWiki;
 	protected $userInfo;
     protected $userName;
-    protected $groups = [];
+    protected $userGroups = [];
 	
 	public function __construct( array $params = [] ) {
 		parent::__construct($params);
 
 		// TODO: Keep eye out for other things that need logging. Admin changes?
-		$this->logger = LoggerFactory::getInstance('ForumSessionProviderLog');
+		$this->logger = LoggerFactory::getInstance('ForumSessionProvider');
+
+        // This is old Auth_SMF.php extension? Lets compat it.
+        if (!empty($GLOBALS['wgSMFLogin'])) {
+            $this->compatAuthSMF();
+        }
 
         // Administrator always get admin rights.
         if (!in_array(1, $GLOBALS['wgFSPAdminGroups']))
@@ -51,12 +59,12 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
 		if (is_readable($GLOBALS['wgFSPPath'] . '/Settings.php')) {
 		    require ($GLOBALS['wgFSPPath'] . '/Settings.php');
 		    // Globals declared in Settings.php gain local scope.
-		    $GLOBALS['wgFSPCookieName'] = $cookiename;
-		    $GLOBALS['wgFSPBoardURL'] = $boardurl;
+		    $this->cookieName = $cookiename;
+		    $GLOBALS['wgFSPBoardURL'] = $boardurl; // Needs to be called from static functions.
 
 			$this->decodeCookie();
 
-			if ($this->id && is_integer($this->id)) {
+			if ($this->userId && is_integer($this->userId)) {
                 $this->prefix = $db_prefix;
 
                 if (empty($cookie_no_auth_secret) && !empty($auth_secret)) {
@@ -64,16 +72,9 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
                 }
 
                 // TODO: make use of $db_type to support other databases.
-                $this->dbtype = $db_type;
+                $this->databaseDriver = $db_type;
 
-                $this->db = new mysqli($db_server, $db_user, $db_passwd, $db_name);
-
-                if (!$this->db->connect_error) {
-                    $this->loaded = true;
-                }
-                else {
-                    $this->logger->warning('MySQL Error: ' . $this->db->connect_error);
-                }
+                $this->loaded = $this->FSDBConnect($db_server, $db_user, $db_passwd, $db_name);
             }
 		}
 		else {
@@ -81,24 +82,184 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         }
 	}
 
+    /**
+     * Populates settings for the old Auth_SMF extension as needed.
+     *
+     * Don't overwrite more modern variables if set.
+     */
+	private function compatAuthSMF() {
+
+        if (!is_readable($GLOBALS['wgFSPPath'] . '/Settings.php')) {
+            $GLOBALS['wgFSPPath'] = $GLOBALS['wgSMFPath'];
+        }
+
+        if (empty($GLOBALS['wgFSPDenyGroups'])) {
+            $GLOBALS['wgFSPDenyGroups'] = $GLOBALS['wgSMFDenyGroupID'];
+        }
+
+        if (empty($GLOBALS['wgFSPAllowGroups'])) {
+            $GLOBALS['wgFSPAllowGroups'] = $GLOBALS['wgSMFGroupID'];
+        }
+
+        if (empty($GLOBALS['wgFSPAdminGroups'])) {
+            $GLOBALS['wgFSPAdminGroups'] = $GLOBALS['wgSMFAdminGroupID'];
+        }
+
+        // By default they'll expect this.
+        if (empty($GLOBALS['wgFSPInterfaceGroups'])) {
+            $GLOBALS['wgFSPInterfaceGroups'] = $GLOBALS['wgSMFAdminGroupID'];
+        }
+
+        if (empty($GLOBALS['wgFSPSpecialGroups'])) {
+            $GLOBALS['wgFSPSpecialGroups'] = $GLOBALS['wgSMFSpecialGroups'];
+        }
+
+        if (empty($GLOBALS['wgFSPNameStyle'])) {
+            $GLOBALS['wgFSPNameStyle'] = 'smf';
+        }
+
+	    // Enable the ban check unless explicitly disabled.
+	    if ($GLOBALS['wgFSPEnableBanCheck'] !== false) {
+            $GLOBALS['wgFSPEnableBanCheck'] = true;
+        }
+    }
+
+    /**
+     * Database connection wrapper for PDO.
+     *
+     * @param string $db_server
+     * @param string $db_user
+     * @param string $db_passwd
+     * @param string $db_name
+     * @return bool
+     */
+    private function FSDBConnect($db_server, $db_user, $db_passwd, $db_name) {
+        $dsn = '';
+
+        switch ($this->databaseDriver) {
+            case 'postgresql':
+                $dsn = 'pgsql:host='. $db_server . ';dbname=' . $db_name;
+                break;
+            case 'sqlite': // I have no idea if this will ever get used. But hey.
+                $dsn = 'sqlite:' . $db_name;
+                if (substr($db_name, -3) != '.db')
+                    $dsn .= '.db';
+                break;
+            case 'mysql':
+            default: // Assume Mysql
+                $dsn = 'mysql:host='. $db_server . ';dbname=' . $db_name;
+        }
+
+        try {
+            $this->db = new PDO($dsn, $db_user, $db_passwd);
+            return true;
+        } catch (PDOException $e) {
+            $this->FSDBError('PDO failed to connect to forum database:', $e);
+            return false;
+        }
+    }
+
+    /**
+     * Database error wrapper
+     *
+     * @param string $error
+     * @param PDOException $e
+     */
+    protected function FSDBError($error, PDOException $e) {
+	    $this->logger->warning($error);
+        $this->logger->warning('[' . $this->databaseDriver . '|' . $e->getCode() . ']: ' . $e->getMessage());
+    }
+
+    /**
+     * Run the query and if applicable display the mysql error.
+     *
+     * @param string $query
+     * @return bool|PDOStatement
+     */
+    protected function FSDBQuery($query) {
+        try {
+            $request = $this->db->prepare($query);
+            $request->execute();
+        } catch (PDOException $e) {
+            $this->FSDBError('Query failed: ' . $query, $e);
+            return false;
+        }
+        return $request;
+    }
+
+    /**
+     * Fetch the query with assoc.
+     *
+     * @param PDOStatement $request
+     * @return bool|PDORow
+     */
+    public function FSDBFetchAssoc($request)
+    {
+        try {
+            $row = $request->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            $this->FSDBError('Error attempting to fetch row:', $e);
+            return false;
+        }
+
+        return $row;
+    }
+
+    /**
+     * Fetch the query.
+     *
+     * @param PDOStatement $request
+     * @return bool|PDORow
+     */
+    public function FSDBFetchRow($request)
+    {
+        try {
+            $row = $request->fetch(PDO::FETCH_NUM);
+        } catch (PDOException $e) {
+            $this->FSDBError('Error attempting to fetch row:', $e);
+            return false;
+        }
+        return $row;
+    }
+
+    /**
+     * Free the query.
+     *
+     * @param PDOStatement $request
+     * @return bool
+     */
+    protected function FSDBFree($request)
+    {
+        try {
+            $request->closeCursor();
+            $request = null;
+        } catch (PDOException $e) {
+            $this->FSDBError('Error trying to free request:', $e);
+            return false;
+        }
+        return true;
+    }
+
 	private function decodeCookie() {
         switch ($GLOBALS['wgFSPSoftware']) {
             case 'elk1.0':
             case 'elk1.1':
             case 'smf2.1':
-                list($this->id, $this->password) = json_decode($_COOKIE[$GLOBALS['wgFSPCookieName']]);
+                list($this->userId, $this->password) = json_decode($_COOKIE[$this->cookieName]);
                 break;
             case 'smf2.0':
-                list($this->id, $this->password) = unserialize($_COOKIE[$GLOBALS['wgFSPCookieName']]);
+                list($this->userId, $this->password) = unserialize($_COOKIE[$this->cookieName]);
                 break;
             default: return;
         }
 
-        $this->id = (int) $this->id;
+        $this->userId = (int) $this->userId;
         $this->password = (string) $this->password;
     }
 
     /**
+     * Called through MediaWiki.
+     *
      * @param $special
      * @param $subPage
      *
@@ -106,7 +267,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
      *
      * SpecialPageBeforeExecute serves the same purpose.
      *
-     * TODO: Workout session data properly so logouts and redirects actually happen.
+     * TODO: Apparently redirects are working with no further effort?
      */
     public static function onSpecialPageBeforeExecute( $special, $subPage ) {
         // The case of some of these isn't always consistent with what shows up in the url.
@@ -123,6 +284,11 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         }
     }
 
+    /**
+     * Sends the browser to the specified SMF/Elkarte page.
+     *
+     * @param string $action
+     */
 	public static function redirect($action) {
         header ('Location: '.$GLOBALS['wgFSPBoardURL'].'/index.php?action='.$action);
         exit();
@@ -148,24 +314,30 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
             default: return false;
         }
     }
-	
+
+    /**
+     * This function is called by MediaWiki itself
+     *
+     * @param WebRequest $request
+     * @return SessionInfo|null
+     */
     public function provideSessionInfo( WebRequest $request ) {
 	    if (!$this->loaded) {
 	        return null;
         }
 
-        $result = $this->db->query("
+        $result = $this->FSDBQuery("
                 SELECT member_name, email_address, real_name, passwd, password_salt, id_group, additional_groups
                 FROM {$this->prefix}members
-                WHERE id_member = '{$this->id}' AND is_activated = 1
+                WHERE id_member = '{$this->userId}' AND is_activated = 1
                 LIMIT 1
             ");
 
-        $this->userForum = $result->fetch_assoc();
-        $result->free();
+        $this->userForum = $this->FSDBFetchAssoc($result);
+        $this->FSDBFree($result);
 
         if (empty($this->userForum)) {
-            $this->logger->warning('Member id not found in forum database: ' . $this->id);
+            $this->logger->warning('Member id not found in forum database: ' . $this->userId);
             return null;
         }
 
@@ -181,28 +353,28 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
                 case 'domain':
                     // A more restrictive policy.
                     if ($this->userName !== preg_replace('`[^a-zA-Z0-9 .-]+`i', '', $this->userName)) {
-                        $this->logger->warning('Member failed to validate domain pattern: ' . $this->id);
+                        $this->logger->warning('Member failed to validate domain pattern: ' . $this->userId);
                         return null;
                     }
                     break;
                 default:
                     // Just kick them if they have an unusable username.
                     if (preg_match('`[#<>[\]|{}@:]+`', $this->userName)) {
-                        $this->logger->warning('Member with invalid name: ' . $this->id);
+                        $this->logger->warning('Member with invalid name: ' . $this->userId);
                         return null;
                     }
             }
 
         }
         else {
-            $this->logger->warning('Member ID ' . $this->id . ' failed to validate. Remote IP:' . $_SERVER['REMOTE_ADDR']);
+            $this->logger->warning('Member ID ' . $this->userId . ' failed to validate. Remote IP:' . $_SERVER['REMOTE_ADDR']);
             return null;
         }
 
         if (strlen($this->userForum['additional_groups'])) {
-            $this->groups = explode(',', $this->userForum['additional_groups']);
+            $this->userGroups = explode(',', $this->userForum['additional_groups']);
         }
-        $this->groups[] = $this->userForum['id_group'];
+        $this->userGroups[] = $this->userForum['id_group'];
 
         $this->userInfo = UserInfo::newFromName($this->userName, true);
         $this->userWiki = $this->userInfo->getUser();
@@ -225,12 +397,12 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
             $this->updateWikiUser();
         }
 
-        if ((!array_intersect($GLOBALS['wgFSPAllowGroups'], $this->groups) ||
-                array_intersect($GLOBALS['wgFSPDenyGroups'], $this->groups) ||
+        if ((!array_intersect($GLOBALS['wgFSPAllowGroups'], $this->userGroups) ||
+                array_intersect($GLOBALS['wgFSPDenyGroups'], $this->userGroups) ||
                 $this->isBanned()) &&
-                !array_intersect($GLOBALS['wgFSPAdminGroups'], $this->groups) &&
-                !array_intersect($GLOBALS['wgFSPSuperGroups'], $this->groups)) {
-            $this->logger->warning('Member denied access: ' . $this->id);
+                !array_intersect($GLOBALS['wgFSPAdminGroups'], $this->userGroups) &&
+                !array_intersect($GLOBALS['wgFSPSuperGroups'], $this->userGroups)) {
+            $this->logger->warning('Member denied access: ' . $this->userId);
             return null;
         }
 
@@ -244,13 +416,13 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
             $forceUse = false;
         }
 
-        return new SessionInfo( SessionInfo::MAX_PRIORITY, [
+        return new SessionInfo(SessionInfo::MAX_PRIORITY, [
             'provider' => $this,
             'id' => $id,
             'userInfo' => $this->userInfo,
             'persisted' => $persisted,
             'forceUse' => $forceUse,
-        ] );
+        ]);
     }
 
     private function updateWikiUser() {
@@ -258,7 +430,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         $this->userWiki->setRealName($this->userForum['real_name']);
 
         if ($this->userWiki->getOption('forum_member_id', 0) === 0) {
-            $this->userWiki->setOption('forum_member_id', $this->id);
+            $this->userWiki->setOption('forum_member_id', $this->userId);
         }
 
         $this->userWiki->setOption('forum_last_update_user', time());
@@ -288,10 +460,10 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         // Now we are going to check all the groups.
         foreach ($groupActions as $wiki_group_name => $fs_group_ids) {
             // They are in the Forum group but not the wiki group?
-            if (array_intersect($fs_group_ids, $this->groups) && !in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
+            if (array_intersect($fs_group_ids, $this->userGroups) && !in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
                 $this->userWiki->addGroup($wiki_group_name);
             // They are not in the Forum group, but in the wiki group
-            elseif (!array_intersect($fs_group_ids, $this->groups) && in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
+            elseif (!array_intersect($fs_group_ids, $this->userGroups) && in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
                 $this->userWiki->removeGroup($wiki_group_name);
         }
 
@@ -332,17 +504,29 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         }
     }
 
+    /**
+     * This is broken out because I suspect banning code is going to evolve a bit differently between forks.
+     *
+     * @return bool|PDORow
+     */
     private function isBannedSMF() {
-        $result = $this->db->query('
+        $result = $this->FSDBQuery('
 			SELECT id_ban
 			FROM ' . $this->prefix . 'ban_items AS i
 			LEFT JOIN ' . $this->prefix . 'ban_groups AS g
 				ON (i.id_ban_group = g.id_ban_group)
-			WHERE i.id_member = ' . ( (int) $this->id) . '
+			WHERE i.id_member = ' . ( (int) $this->userId) . '
 				AND (g.cannot_post = 1 OR g.cannot_login = 1)');
 
-        $banned = $result->num_rows;
-        $result->free();
+        $banned = $this->FSDBFetchRow($result);
+        $this->FSDBFree($result);
+
+        if (!empty($banned)) {
+            $banned = true;
+        }
+        else {
+            $banned = false;
+        }
 
         $this->userWiki->setOption('forum_last_update_ban', time());
         $this->userWiki->setOption('forum_is_banned', $banned);

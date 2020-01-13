@@ -54,8 +54,6 @@ Options
 
     $wgFSPSoftware = "smf2.0";
 
-*Warning* - I haven't tested SMF 2.1 specifically, but it should work fine. Please open an issue if this isn't the case and I will look into it.
-
 **$wgFSPNameStyle** Optional, defines how to handle illegal usernames. Defaults to 'smf'. Possible values are:
 
 * smf - Mimics previous Auth extension behavior, where characters MediaWiki can't use are swapped out with characters SMF can't use.
@@ -108,7 +106,7 @@ This bloats pretty quickly, so you'll want to comment it out after you have reso
 Stuff To Do
 ----------------------------------------
 * Add more forks, as needed.
-* Support Postgres and possibly SQLLite, as needed.
+* Add MediaWiki's 1.28+ caching support (I can't test this personally yet)
 
 ----
 Getting New SMF Forks In

@@ -19,8 +19,8 @@
     "Software": "elk1.1",
     "EnableBanCheck": false,
     "SuperGroups": [],
-    "InterfaceGroups": [1],
-    "AdminGroups": [1],
+    "InterfaceGroups": [],
+    "AdminGroups": [],
     "AllowGroups": [],
     "DenyGroups": [],
     "SpecialGroups": []
