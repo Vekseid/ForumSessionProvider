@@ -320,7 +320,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
                 break;
             case 'smf2.0':
                 if ($this->authSecret !== false) {
-                    return $this->userForum['passwd'] === hash_hmac('sha1', sha1($this->userForum['passwd'] . $this->userForum['password_salt']), $this->authSecret);
+                    return $this->password === hash_hmac('sha1', sha1($this->userForum['passwd'] . $this->userForum['password_salt']), $this->authSecret);
                 }
                 else {
                     return $this->password === sha1($this->userForum['passwd'] . $this->userForum['password_salt']);
