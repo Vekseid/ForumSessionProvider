@@ -17,6 +17,7 @@
     "Path": "../forum",
     "NameStyle": "smf",
     "Software": "elk1.1",
+    "Debug": false,
     "EnableBanCheck": false,
     "SuperGroups": [],
     "InterfaceGroups": [],

@@ -89,6 +89,10 @@ Options
 **$wgFSPEnableBanCheck** Optional, defaults to false. Checks Elkarte's SMF/Ban tables for bans.
 
     $wgFSPEnableBanCheck = true;
+    
+**$wgFSPDebug** Optional. If true, more data gets passed to $wgDebugLogFile, below. Recommended for verbose troubleshooting.
+
+    $wgFSPDebug = true;
 
 ----
 Troubleshooting
@@ -97,6 +101,7 @@ Troubleshooting
 Set $wgDebugLogFile in your LocalSettings.php:
 
     $wgDebugLogFile = "/some/private/path/mediawiki.log";
+    $wgFSPDebug = true;
     
 Search for ForumSessionProvider and it will tell you what it is thinking.
 
