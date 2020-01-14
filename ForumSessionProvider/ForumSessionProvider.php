@@ -39,7 +39,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
     protected $userName;
     protected $userGroups = [];
 
-    public function __construct( array $params = [] ) {
+    public function __construct(array $params = []) {
         parent::__construct($params);
 
         // TODO: Keep eye out for other things that need logging. Admin changes?
@@ -287,7 +287,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
      *
      * TODO: Apparently redirects are working with no further effort?
      */
-    public static function onSpecialPageBeforeExecute( $special, $subPage ) {
+    public static function onSpecialPageBeforeExecute($special, $subPage) {
         // The case of some of these isn't always consistent with what shows up in the url.
         switch (strtolower($special->getName())) {
             case 'createaccount':
@@ -376,7 +376,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
                 case 'smf':
                     // Generally backwards compatible with former SMF/Elkarte Auth plugins.
                     $this->userName = str_replace('_', '\'', $this->userName);
-                    $this->userName = strtr($this->userName, array('[' => '=', ']' => '"', '|' => '&', '#' => '\\', '{' => '==', '}' => '""', '@' => '&&', ':' => '\\\\'));
+                    $this->userName = strtr($this->userName, ['[' => '=', ']' => '"', '|' => '&', '#' => '\\', '{' => '==', '}' => '""', '@' => '&&', ':' => '\\\\']);
                     break;
                 case 'domain':
                     // A more restrictive policy.
@@ -540,7 +540,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
     }
 
     /**
-     * This is broken out because I suspect banning code is going to evolve a bit differently between forks.
+     * This remains broken out because I suspect banning code is going to evolve a bit differently between forks.
      *
      * @return bool|PDORow
      */
