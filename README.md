@@ -54,8 +54,6 @@ Options
 
     $wgFSPSoftware = "smf2.0";
 
-*Warning* - I haven't tested SMF 2.1 specifically, but it should work fine. Please open an issue if this isn't the case and I will look into it.
-
 **$wgFSPNameStyle** Optional, defines how to handle illegal usernames. Defaults to 'smf'. Possible values are:
 
 * smf - Mimics previous Auth extension behavior, where characters MediaWiki can't use are swapped out with characters SMF can't use.
@@ -80,13 +78,40 @@ Options
     $wgFSPAdminGroups = [1, 2, 91];
     $wgFSPInterfaceGroups = [1, 2, 97];
     $wgFSPSuperGroups = [1];
+    
+**$wgFSPSpecialGroups** Optional associative array of arrays to map forum groups to wiki groups.
+
+    $wgFSPSpecialGroups = [
+        'coolpeople' => [4, 15, 92], 
+        'sanepeople' => [3, 234, 413]
+    ];
+    
+**$wgFSPEnableBanCheck** Optional, defaults to false. Checks Elkarte's SMF/Ban tables for bans.
+
+    $wgFSPEnableBanCheck = true;
+    
+**$wgFSPDebug** Optional. If true, more data gets passed to $wgDebugLogFile, below. Recommended for verbose troubleshooting.
+
+    $wgFSPDebug = true;
+
+----
+Troubleshooting
+---------------
+
+Set $wgDebugLogFile in your LocalSettings.php:
+
+    $wgDebugLogFile = "/some/private/path/mediawiki.log";
+    $wgFSPDebug = true;
+    
+Search for ForumSessionProvider and it will tell you what it is thinking.
+
+This bloats pretty quickly, so you'll want to comment it out after you have resolved your problem.
 
 ----
 Stuff To Do
 ----------------------------------------
 * Add more forks, as needed.
-* Support Postgres and/or SQLLite, as needed.
-* Add group mapping like the old auth plugin did.
+* Add MediaWiki's 1.28+ caching support (I can't test this personally yet)
 
 ----
 Getting New SMF Forks In

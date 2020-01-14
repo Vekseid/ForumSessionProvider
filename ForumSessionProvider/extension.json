@@ -1,8 +1,9 @@
 {
   "name": "ForumSessionProvider",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": [
-    "Vekseid"
+    "Vekseid",
+    "jdarwood007"
   ],
   "url": "https://github.com/Vekseid/ForumSessionProvider",
   "description": "Uses an Elkarte or SMF installation as a session provider for MediaWiki single-sign on.",
@@ -13,14 +14,17 @@
   },
   "config": {
     "_prefix": "wgFSP",
-    "Path": "",
+    "Path": "../forum",
     "NameStyle": "smf",
     "Software": "elk1.1",
+    "Debug": false,
+    "EnableBanCheck": false,
     "SuperGroups": [],
-    "InterfaceGroups": [1],
-    "AdminGroups": [1],
+    "InterfaceGroups": [],
+    "AdminGroups": [],
     "AllowGroups": [],
-    "DenyGroups:": []
+    "DenyGroups": [],
+    "SpecialGroups": []
   },
   "SessionProviders": {
     "ForumSessionProvider": {
@@ -28,8 +32,20 @@
       "args": []
     }
   },
+  "AuthManagerAutoConfig": {
+    "primaryauth": {
+      "ForumAuthManager": {
+        "class": "ForumAuthManager",
+        "args": []
+      }
+    }
+  },
   "DefaultUserOptions": {
-    "forum_last_update": 0
+    "forum_last_update_groups": 0,
+    "forum_last_update_user": 0,
+    "forum_last_update_ban": 0,
+    "forum_member_id": 0,
+    "forum_is_banned": 0
   },
   "Hooks": {
     "SpecialPageBeforeExecute": [
@@ -37,7 +53,8 @@
     ]
   },
   "AutoloadClasses": {
-    "ForumSessionProvider": "ForumSessionProvider.php"
+    "ForumSessionProvider": "ForumSessionProvider.php",
+    "ForumAuthManager": "ForumAuthManager.php"
   },
   "manifest_version": 1
 }
