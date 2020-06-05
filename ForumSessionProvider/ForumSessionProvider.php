@@ -263,7 +263,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
             case 'elk1.0':
             case 'elk1.1':
             case 'smf2.1':
-                list($this->userId, $this->password) = json_decode($_COOKIE[$this->cookieName]);
+                list($this->userId, $this->password) = json_decode($_COOKIE[$this->cookieName], true);
                 break;
             case 'smf2.0':
                 list($this->userId, $this->password) = unserialize($_COOKIE[$this->cookieName]);
