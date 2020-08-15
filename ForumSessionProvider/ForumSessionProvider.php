@@ -69,6 +69,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
             }
             // Globals declared in Settings.php gain local scope.
             $this->cookieName = $cookiename;
+			
             $GLOBALS['wgFSPBoardURL'] = $boardurl; // Needs to be called from static functions.
 
             $this->decodeCookie();
@@ -420,14 +421,12 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         }
 
         // Toggle special permissions immediately if they have changed.
-        $this->setWikiGroups();
+            $this->setWikiGroups();
 
         /**
-         * The forum is responsible for e-mails, so we don't need to worry about it changing much.
+         * If any user data has changed, go ahead and update it now
          */
-        if (time() > ((int) $this->userWiki->getOption('forum_last_update_user', 0) + 1800)) {
             $this->updateWikiUser();
-        }
 
         if ((!array_intersect($GLOBALS['wgFSPAllowGroups'], $this->userGroups) ||
                 array_intersect($GLOBALS['wgFSPDenyGroups'], $this->userGroups) ||
@@ -461,18 +460,33 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
     }
 
     private function updateWikiUser() {
-        $this->userWiki->setEmail($this->userForum['email_address']);
-        $this->userWiki->setRealName($this->userForum['real_name']);
-
+        /*
+        * This will check if user's email or "real name" (Which is the forums display name) have changed
+        * It also ensures that if the forum_member_id is 0, we set it to the proper value
+        */
+		$userChanged = false;
+		if ($this->userWiki->getEmail() != $this->userForum['email_address'] ){
+			$this->userWiki->setEmail($this->userForum['email_address']);
+			$this->userWiki->mEmailAuthenticated = wfTimestampNow();
+			$userChanged = true;
+		}
+		if ($this->userWiki->getRealName() != $this->userForum['real_name'] ) {
+			$this->userWiki->setRealName($this->userForum['real_name']);
+			$userChanged = true;
+		}
         if ($this->userWiki->getOption('forum_member_id', 0) === 0) {
             $this->userWiki->setOption('forum_member_id', $this->userId);
+			$userChanged = true;
         }
-
-        $this->userWiki->setOption('forum_last_update_user', time());
-        $this->userWiki->saveSettings();
+		if ($userChanged){
+            // No need to save if nothing has happened
+			$this->userWiki->setOption('forum_last_update_user', time());
+			$this->userWiki->saveSettings();
+		}
     }
 
     private function setWikiGroups() {
+        // Check that the group configuration hasn't changed
         // Wiki Group Name => Forum Group IDS
         $groupActions = [
             'sysop' => $GLOBALS['wgFSPAdminGroups'],
@@ -491,21 +505,30 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
                 $groupActions[$wiki_group_name][] = $fs_group_id;
             }
         }
-
+        /*
+        * If a user's groups haven't changed, we can leave things alone
+        */
+        $madeChange = false;
         // Now we are going to check all the groups.
         foreach ($groupActions as $wiki_group_name => $fs_group_ids) {
             // They are in the Forum group but not the wiki group?
-            if (array_intersect($fs_group_ids, $this->userGroups) && !in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
+            if (array_intersect($fs_group_ids, $this->userGroups) && !in_array($wiki_group_name, $this->userWiki->getEffectiveGroups())){
                 $this->userWiki->addGroup($wiki_group_name);
+				$madeChange = true;
+			}
             // They are not in the Forum group, but in the wiki group
-            elseif (!array_intersect($fs_group_ids, $this->userGroups) && in_array($wiki_group_name, $this->userWiki->getEffectiveGroups()))
+            elseif (!array_intersect($fs_group_ids, $this->userGroups) && in_array($wiki_group_name, $this->userWiki->getEffectiveGroups())){
                 $this->userWiki->removeGroup($wiki_group_name);
+				$madeChange = true;
+			}
         }
 
         // Did we make any changes?
+		if ($madeChange){
         $this->userWiki->setOption('forum_last_update_groups', time());
         $this->userWiki->saveSettings();
-    }
+		}
+	}
 
     private function createWikiUser() {
         $this->userWiki->setName($this->userName);
