@@ -260,20 +260,22 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
     }
 
     private function decodeCookie() {
-        switch ($GLOBALS['wgFSPSoftware']) {
-            case 'elk1.0':
-            case 'elk1.1':
-            case 'smf2.1':
-                list($this->userId, $this->password) = json_decode($_COOKIE[$this->cookieName], true);
-                break;
-            case 'smf2.0':
-                list($this->userId, $this->password) = unserialize($_COOKIE[$this->cookieName]);
-                break;
-            default: return;
-        }
+        if (isset($_COOKIE[$this->cookieName])) {
+            switch ($GLOBALS['wgFSPSoftware']) {
+                case 'elk1.0':
+                case 'elk1.1':
+                case 'smf2.1':
+                    list($this->userId, $this->password) = json_decode($_COOKIE[$this->cookieName], true);
+                    break;
+                case 'smf2.0':
+                    list($this->userId, $this->password) = unserialize($_COOKIE[$this->cookieName]);
+                    break;
+                default: return;
+            }
 
-        $this->userId = (int) $this->userId;
-        $this->password = (string) $this->password;
+            $this->userId = (int) $this->userId;
+            $this->password = (string) $this->password;
+        }
     }
 
     /**
@@ -495,7 +497,7 @@ class ForumSessionProvider extends ImmutableSessionProviderWithCookie {
         ];
 
         // Add in our special groups.
-        if (is_array($GLOBALS['wgFSPSpecialGroups'])) {
+        if (isset($GLOBALS['wgFSPSpecialGroups']) && is_array($GLOBALS['wgFSPSpecialGroups'])) {
             foreach ($GLOBALS['wgFSPSpecialGroups'] as $fs_group_id => $wiki_group_name) {
                 // Group didn't exist?
                 if (!isset($groupActions[$wiki_group_name]))
